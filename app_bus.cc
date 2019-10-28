@@ -337,13 +337,23 @@ namespace node_app {
 	}
 
 	void AppBus::registerToContext(uv_loop_t* loop, v8::Local<v8::Context> context, const char* globalKey) {
+		v8::Context::Scope context_scope(context);
+
 		v8::Isolate* isolate = context->GetIsolate();
+
+		v8::Local<v8::ObjectTemplate> v_templ = v8::ObjectTemplate::New(isolate);
+
 		v8::Local<v8::String> v_global_key(v8::String::NewFromUtf8(isolate, globalKey));
-		v8::Local<v8::Object> v_event_bus(v8::Object::New(isolate));
+		v8::Local<v8::Object> v_event_bus;
 		v8::Local<v8::Function> v_func_on;
+
+		v_templ->SetInternalFieldCount(2);
+
+		v_event_bus = v_templ->NewInstance(context).ToLocalChecked();
 
 		v_event_bus->SetAlignedPointerInInternalField(0, this);
 		v_event_bus->SetAlignedPointerInInternalField(1, loop);
+
 
 		{
 			v8::Local<v8::Value> key = v8::String::NewFromUtf8(isolate, "on");
