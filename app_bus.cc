@@ -14,20 +14,6 @@
 
 namespace node_app {
 
-	struct AppBus::EventMessage {
-		rapidjson::Document args;
-
-		EventMessage()
-			: args(rapidjson::kArrayType)
-		{
-		}
-	};
-
-	struct AppBus::EventHolder {
-		std::mutex mutex;
-		std::list<std::shared_ptr<EventHandlerHolder>> list;
-	};
-
 	class AppBus::EventLock {
 	private:
 		std::unique_lock<std::mutex> lock_;
@@ -59,14 +45,6 @@ namespace node_app {
 			}
 			lock_ = std::unique_lock<std::mutex>(holder_->mutex);
 		}
-	};
-
-	struct AppBus::EventHandlerHolder {
-		uv_loop_t* loop_;
-		EventHandlerHolder(uv_loop_t* loop) : loop_(loop) {}
-		virtual ~EventHandlerHolder() {}
-		uv_loop_t* loop() const { return loop_; }
-		virtual void handle(std::shared_ptr<EventMessage> message) = 0;
 	};
 
 	struct AppBus::HostEventHandlerHolder : EventHandlerHolder {

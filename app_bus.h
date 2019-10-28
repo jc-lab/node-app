@@ -37,13 +37,33 @@ namespace node_app {
 	private:
 		uv_loop_t* loop_;
 
-		struct EventMessage;
-		struct EventHolder;
+
+		struct EventMessage {
+			rapidjson::Document args;
+
+			EventMessage()
+				: args(rapidjson::kArrayType)
+			{
+			}
+		};
+
+		struct EventHandlerHolder {
+			uv_loop_t* loop_;
+			EventHandlerHolder(uv_loop_t* loop) : loop_(loop) {}
+			virtual ~EventHandlerHolder() {}
+			uv_loop_t* loop() const { return loop_; }
+			virtual void handle(std::shared_ptr<EventMessage> message) = 0;
+		};
+
+		struct EventHolder {
+			std::mutex mutex;
+			std::list<std::shared_ptr<EventHandlerHolder>> list;
+		};
+
 		class EventLock;
 
 		struct EventEmitTask;
 
-		struct EventHandlerHolder;
 		struct HostEventHandlerHolder;
 		struct V8EventHandlerHolder;
 
