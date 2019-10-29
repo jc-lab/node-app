@@ -81,6 +81,7 @@ namespace node_app {
 		EventEmitTask(std::shared_ptr<EventMessage> message, std::shared_ptr<EventHandlerHolder> handler)
 			: message_(message), handler_(handler)
 		{
+			memset(&async_, 0, sizeof(async_));
 			uv_async_init(handler->loop() , &async_, callback);
 			async_.data = this;
 		}
@@ -154,8 +155,7 @@ namespace node_app {
 		}
 	}
 
-	static v8::Local<v8::Value> jsonObjectToV8Value(v8::Local<v8::Context> vcontext, const rapidjson::Value& src) {
-		v8::Isolate* isolate = vcontext->GetIsolate();
+	static v8::Local<v8::Value> jsonObjectToV8Value(v8::Isolate *isolate, const rapidjson::Value& src) {
 		v8::Local<v8::Value> vtarget;
 		if (src.IsNull()) {
 			vtarget = v8::Null(isolate);
@@ -170,7 +170,7 @@ namespace node_app {
 			vtarget = v8::Int32::New(isolate, src.GetInt());
 		}
 		else if (src.IsUint()) {
-			vtarget = v8::Uint32::New(isolate, src.GetInt());
+			vtarget = v8::Uint32::New(isolate, src.GetUint());
 		}
 		else if (src.IsInt64()) {
 			vtarget = v8::Number::New(isolate, src.GetInt64());
@@ -181,8 +181,8 @@ namespace node_app {
 		else if (src.IsObject()) {
 			v8::Local<v8::Object> vmap = v8::Object::New(isolate);
 			for (auto iter = src.MemberBegin(); iter != src.MemberEnd(); iter++) {
-				v8::Local<v8::Value> vkey = jsonObjectToV8Value(vcontext, iter->name);
-				v8::Local<v8::Value> vvalue = jsonObjectToV8Value(vcontext, iter->value);
+				v8::Local<v8::Value> vkey = jsonObjectToV8Value(isolate, iter->name);
+				v8::Local<v8::Value> vvalue = jsonObjectToV8Value(isolate, iter->value);
 				vmap->Set(vkey, vvalue);
 			}
 			vtarget = vmap;
@@ -191,7 +191,7 @@ namespace node_app {
 			v8::Local<v8::Array> varr = v8::Array::New(isolate);
 			uint32_t index = 0;
 			for (auto iter = src.Begin(); iter != src.End(); iter++, index++) {
-				v8::Local<v8::Value> vvalue = jsonObjectToV8Value(vcontext, *iter);
+				v8::Local<v8::Value> vvalue = jsonObjectToV8Value(isolate, *iter);
 				varr->Set(index, vvalue);
 			}
 			vtarget = varr;
@@ -218,8 +218,9 @@ namespace node_app {
 	}
 
 	void AppBus::v8CallbackOn(const v8::FunctionCallbackInfo<v8::Value>& info) {
-		v8::HandleScope scope(v8::Isolate::GetCurrent());
 		v8::Isolate* isolate = info.GetIsolate();
+		v8::HandleScope scope(isolate);
+		v8::Local<v8::Context> context = isolate->GetCurrentContext();
 		v8::Local<v8::Object> v_event_bus = info.This();
 		AppBus* self = static_cast<AppBus*>(v_event_bus->GetAlignedPointerFromInternalField(0));
 		uv_loop_t* loop = static_cast<uv_loop_t*>(v_event_bus->GetAlignedPointerFromInternalField(1));
@@ -265,10 +266,14 @@ namespace node_app {
 		std::shared_ptr<EventMessage> message(new EventMessage());
 		if (single_argument)
 		{
-			message->args.PushBack(args, message->args.GetAllocator());
+			rapidjson::Value jsonValue;
+			jsonValue.CopyFrom(args, message->args.GetAllocator());
+			message->args.PushBack(jsonValue, message->args.GetAllocator());
 		} else {
 			for (auto iter = args.Begin(); iter != args.End(); iter++) {
-				message->args.PushBack(*iter, message->args.GetAllocator());
+				rapidjson::Value jsonValue;
+				jsonValue.CopyFrom(*iter, message->args.GetAllocator());
+				message->args.PushBack(jsonValue, message->args.GetAllocator());
 			}
 		}
 		this->emitImpl(event_key, message);
@@ -306,8 +311,10 @@ namespace node_app {
 	void AppBus::V8EventHandlerHolder::handle(std::shared_ptr<EventMessage> message) {
 		v8::Isolate* isolate = v8::Isolate::GetCurrent();
 		v8::HandleScope handle_scope(isolate);
+		v8::Local<v8::Context> context = v8::Context::New(isolate);
+		v8::Context::Scope context_scope(context);
 
-		v8::Local<v8::Context> vcontext = isolate->GetCurrentContext();
+		v8::Local<v8::Context> temp = isolate->GetCurrentContext();
 
 		v8::Local<v8::Function> vcallback = v8::Local<v8::Function>::New(isolate, vpfunc_);
 
@@ -316,10 +323,13 @@ namespace node_app {
 
 		int index = 0;
 		for (auto iter = args.Begin(); iter != args.End(); iter++, index++) {
-			vargs[index] = jsonObjectToV8Value(vcontext, *iter);
+			vargs[index] = jsonObjectToV8Value(isolate, *iter);
 		}
 
-		vcallback->Call(vcontext, v8::Null(isolate), vargs.size(), vargs.data());
+		vcallback->Call(temp, v8::Null(isolate), vargs.size(), vargs.data());
+		//node::async_context async_context = node::EmitAsyncInit(isolate, v8::Object::New(isolate), "AppBus emit");
+		//node::MakeCallback(isolate, v8::Null(isolate).As<v8::Object>(), vcallback, vargs.size(), vargs.data(), async_context);
+		//node::EmitAsyncDestroy(isolate, async_context);
 	}
 
 	void AppBus::HostEventHandlerHolder::handle(std::shared_ptr<EventMessage> message)
@@ -346,6 +356,16 @@ namespace node_app {
 		v8::Local<v8::String> v_global_key(v8::String::NewFromUtf8(isolate, globalKey));
 		v8::Local<v8::Object> v_event_bus;
 		v8::Local<v8::Function> v_func_on;
+
+		if (!loop) {
+#if NODE_MAJOR_VERSION >= 10 || \
+  NODE_MAJOR_VERSION == 9 && NODE_MINOR_VERSION >= 3 || \
+  NODE_MAJOR_VERSION == 8 && NODE_MINOR_VERSION >= 10
+			loop = node::GetCurrentEventLoop(v8::Isolate::GetCurrent());
+#else
+			loop = uv_default_loop();
+#endif
+		}
 
 		v_templ->SetInternalFieldCount(2);
 
