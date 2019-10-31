@@ -214,12 +214,10 @@ require("./)");
 		v8::Isolate* isolate = info.GetIsolate();
 		if ((info.Length() < 2))
 		{
-			info.GetReturnValue().Set(v8::Integer::New(isolate, -1));
 			return -1;
 		}
 		if (!info[0]->IsString() || !info[1]->IsString())
 		{
-			info.GetReturnValue().Set(v8::Integer::New(isolate, -1));
 			return -1;
 		}
 
@@ -234,7 +232,6 @@ require("./)");
 		const char* path_begin = strstr(*info_path, *info_cwd);
 		if (!path_begin)
 		{
-			info.GetReturnValue().Set(v8::Integer::New(isolate, -1));
 			return -1;
 		}
 
@@ -249,8 +246,10 @@ require("./)");
 	{
 		std::string relpath;
 		int rc = argToRelPath(relpath, info);
-		if (rc < 0)
+		if (rc < 0) {
+			info.GetReturnValue().Set(v8::Integer::New(info.GetIsolate(), rc));
 			return;
+		}
 
 		v8::Isolate* isolate = info.GetIsolate();
 
@@ -268,11 +267,14 @@ require("./)");
 	{
 		std::string relpath;
 		std::string arg_path;
-		int rc = argToRelPath(relpath, info, &arg_path);
-		if (rc < 0)
-			return;
-
+		
 		v8::Isolate* isolate = info.GetIsolate();
+
+		int rc = argToRelPath(relpath, info, &arg_path);
+		if (rc < 0) {
+			info.GetReturnValue().Set(v8::Null(isolate));
+			return;
+		}
 
 		if (instance_->vfs_handler_)
 		{
@@ -281,9 +283,12 @@ require("./)");
 			if (rc >= 0)
 			{
 				info.GetReturnValue().Set(v8::String::NewFromUtf8(isolate, retval.c_str(), v8::NewStringType::kNormal, retval.length()).ToLocalChecked());
+			} else {
+				info.GetReturnValue().Set(v8::Null(isolate));
 			}
 		} else {
 			rc = -1;
+			info.GetReturnValue().Set(v8::Null(isolate));
 		}
 	}
 
@@ -291,8 +296,10 @@ require("./)");
 	{
 		std::string relpath;
 		int rc = argToRelPath(relpath, info);
-		if (rc < 0)
+		if (rc < 0) {
+			info.GetReturnValue().Set(v8::Integer::New(info.GetIsolate(), rc));
 			return;
+		}
 
 		v8::Isolate* isolate = info.GetIsolate();
 
