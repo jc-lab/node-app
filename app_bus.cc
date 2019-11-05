@@ -127,6 +127,21 @@ namespace node_app {
 			v8::Local<v8::NumberObject> vimpl = vvalue.As<v8::NumberObject>();
 			target.SetDouble(vimpl->ValueOf());
 		}
+		else if (vvalue->IsObject()) {
+			v8::Local<v8::Object> vmap = vvalue.As<v8::Object>();
+			v8::Local<v8::Array> keys = vmap->GetPropertyNames(vcontext).ToLocalChecked();
+			target.SetObject();
+			for (size_t i = 0; i < keys->Length(); i++) {
+				// For-In Next:
+				v8::Local<v8::Value> vkey = keys->Get(i);
+				v8::String::Utf8Value utf8_key(isolate, vkey);
+				rapidjson::Value jkey;
+				rapidjson::Value jvalue;
+				jkey.SetString(*utf8_key, utf8_key.length(), allocator);
+				v8ValueToJsonObject(jvalue, allocator, isolate, vmap->Get(vcontext, vkey).ToLocalChecked());
+				target.AddMember(jkey, jvalue, allocator);
+			}
+		}
 		else if (vvalue->IsMap()) {
 			v8::Local<v8::Map> vmap = vvalue.As<v8::Map>();
 			v8::Local<v8::Array> keys = vmap->GetPropertyNames(vcontext).ToLocalChecked();
