@@ -166,22 +166,27 @@ require("./)");
 		node::Init(&argc, (const char**)run_env_->arguments.data(), &exec_argc, &exec_argv);
 		run_env_->env_ = node::CreateEnvironment(run_env_->isolate_data_, run_env_->context_, argc_, argv_, exec_argc, exec_argv);
 
-		node::LoadEnvironment(run_env_->env_);
-
-		bool more;
 		do {
-			more = uv_run(loop_, UV_RUN_ONCE);
-			platform_->DrainTasks(run_env_->isolate_);
-			if (more == false) {
-				node::EmitBeforeExit(run_env_->env_);
-				more = uv_loop_alive(loop_);
-				if (uv_run(loop_, UV_RUN_NOWAIT) != 0)
-					more = true;
-			}
-		} while (more == true);
+			v8::Context::Scope context_scope(run_env_->context_);
 
-		exit_code = node::EmitExit(run_env_->env_);
-		node::RunAtExit(run_env_->env_);
+			node::LoadEnvironment(run_env_->env_);
+
+			bool more;
+			do {
+				more = uv_run(loop_, UV_RUN_ONCE);
+				platform_->DrainTasks(run_env_->isolate_);
+				if (more == false) {
+					node::EmitBeforeExit(run_env_->env_);
+					more = uv_loop_alive(loop_);
+					if (uv_run(loop_, UV_RUN_NOWAIT) != 0)
+						more = true;
+				}
+			} while (more == true);
+
+			exit_code = node::EmitExit(run_env_->env_);
+			node::RunAtExit(run_env_->env_);
+
+		} while (false);
 
 		node::FreeEnvironment(run_env_->env_);
 		run_env_->env_ = NULL;
