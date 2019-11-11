@@ -193,6 +193,12 @@ namespace node_app {
 		else if (src.IsUint64()) {
 			vtarget = v8::Number::New(isolate, src.GetUint64());
 		}
+		else if (src.IsDouble()) {
+			vtarget = v8::Number::New(isolate, src.GetDouble());
+		}
+		else if (src.IsFloat()) {
+			vtarget = v8::Number::New(isolate, src.GetFloat());
+		}
 		else if (src.IsObject()) {
 			v8::Local<v8::Object> vmap = v8::Object::New(isolate);
 			for (auto iter = src.MemberBegin(); iter != src.MemberEnd(); iter++) {
