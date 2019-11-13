@@ -33,6 +33,7 @@ namespace node_app {
 
 		void on(const char* event_key, EventHandler_t handler, uv_loop_t *loop = NULL);
 		void emit(const char* event_key, rapidjson::Value& args, bool single_argument = false);
+        void emit(const char* event_key);
 
 	private:
 		uv_loop_t* loop_;

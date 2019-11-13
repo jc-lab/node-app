@@ -300,6 +300,11 @@ namespace node_app {
 		this->emitImpl(event_key, message);
 	}
 
+    void AppBus::emit(const char* event_key) {
+        std::shared_ptr<EventMessage> message(new EventMessage());
+        this->emitImpl(event_key, message);
+    }
+
 	void AppBus::v8CallbackEmit(const v8::FunctionCallbackInfo<v8::Value>& info) {
 		v8::HandleScope scope(v8::Isolate::GetCurrent());
 		v8::Isolate* isolate = info.GetIsolate();
