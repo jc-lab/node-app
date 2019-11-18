@@ -13,6 +13,7 @@
 #include <node.h>
 #include <uv.h>
 #include "vfs_handler.h"
+#include "console_handler.h"
 
 namespace node_app {
 
@@ -24,6 +25,7 @@ namespace node_app {
 		void teardownProcess();
 
 		void setVfsHandler(VfsHandler *handler);
+		void setConsoleOutputHandler(ConsoleOutputHandler* handler);
 
 		static MainInstance* getInstance();
 		v8::Local<v8::Context> getRootContext();
@@ -55,6 +57,7 @@ namespace node_app {
 		node::MultiIsolatePlatform* platform_;
 
 		VfsHandler *vfs_handler_;
+		ConsoleOutputHandler *console_out_handler_;
 
 		int argc_;
 		char** argv_;
@@ -62,6 +65,7 @@ namespace node_app {
 		std::unique_ptr<RunEnvironment> run_env_;
 
 		void applyVfs(v8::Local<v8::Context>& context);
+		void applyConsole(v8::Local<v8::Context>& context);
 
 		static MainInstance* instance_;
 
@@ -69,6 +73,7 @@ namespace node_app {
 		static void jsapp_callback_vfs_internalModuleStat(const v8::FunctionCallbackInfo<v8::Value>& info);
 		static void jsapp_callback_vfs_realpathSync(const v8::FunctionCallbackInfo<v8::Value>& info);
 		static void jsapp_callback_vfs_readFileSync(const v8::FunctionCallbackInfo<v8::Value>& info);
+		static void jsapp_callback_console_out(const v8::FunctionCallbackInfo<v8::Value>& info);
 	};
 
 	template<class T>

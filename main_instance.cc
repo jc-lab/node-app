@@ -57,7 +57,7 @@ namespace node_app {
 	};
 
 	MainInstance::MainInstance()
-		: vfs_handler_(NULL)
+		: vfs_handler_(NULL), console_out_handler_(NULL)
 	{
 		instance_ = this;
 	}
@@ -116,6 +116,7 @@ namespace node_app {
 				run_env_->arguments.push_back(argv_[i]);
 			}
 
+			applyConsole(run_env_->context_);
 			applyVfs(run_env_->context_);
 		}
 	}
@@ -136,7 +137,9 @@ namespace node_app {
 		internalModuleStat: internalFs.internalModuleStat,
 		internalModuleReadJSON: internalFs.internalModuleReadJSON,
 		realpathSync: fs.realpathSync,
-		readFileSync: fs.readFileSync
+		readFileSync: fs.readFileSync,
+		stdout_write: process.stdout.write,
+		stderr_write: process.stderr.write
 	};
 	internalFs.internalModuleStat = function(path) {
 		const r = _app_8a3f.vfs_internalModuleStat(cwd, path);
@@ -154,6 +157,14 @@ namespace node_app {
 	fs.readFileSync = function(path, options) {
 		const resolved = _app_8a3f.vfs_readFileSync(cwd, path, options);
 		return resolved || orig.readFileSync(path, options);
+	}
+	process.stdout.write = function(str, encoding, fg) {
+		if(!_app_8a3e.console_out(1, str))
+			orig.stdout_write.apply(this, arguments);
+	}
+	process.stderr.write = function(str, encoding, fg) {
+		if(!_app_8a3e.console_out(2, str))
+			orig.stderr_write.apply(this, arguments);
 	}
 })();
 require("./)");
@@ -212,6 +223,10 @@ require("./)");
 	void MainInstance::setVfsHandler(VfsHandler* handler)
 	{
 		vfs_handler_ = handler;
+	}
+
+	void MainInstance::setConsoleOutputHandler(ConsoleOutputHandler* handler) {
+		console_out_handler_ = handler;
 	}
 
 	int MainInstance::argToRelPath(std::string& resolved_relpath, const v8::FunctionCallbackInfo<v8::Value>& info, std::string* arg_path)
@@ -318,6 +333,33 @@ require("./)");
 		}
 	}
 
+	void MainInstance::jsapp_callback_console_out(const v8::FunctionCallbackInfo<v8::Value>& info)
+	{
+		v8::Isolate* isolate = info.GetIsolate();
+		
+		bool handled = false;
+
+		do {
+			if (instance_->console_out_handler_) {
+				if ((info.Length() < 2))
+				{
+					break;
+				}
+				if (!info[0]->IsInt32() || !info[1]->IsString())
+				{
+					break;
+				}
+
+				int log_type = info[0]->Int32Value(isolate->GetCurrentContext()).ToChecked();
+				v8::String::Utf8Value log_content(isolate, info[1]);
+
+				handled = instance_->console_out_handler_->consoleOutput((ConsoleOutputType)log_type, std::string(*log_content, log_content.length()));
+			}
+		} while (0);
+
+		info.GetReturnValue().Set(v8::Boolean::New(isolate, handled));
+	}
+
 	void MainInstance::applyVfs(v8::Local<v8::Context>& context) {
 		v8::Context::Scope context_scope(context);
 
@@ -338,6 +380,21 @@ require("./)");
 		{
 			v8::Local<v8::Value> key = v8::String::NewFromUtf8(isolate, "vfs_readFileSync");
 			v8::Local<v8::Function> func = v8::Function::New(context, jsapp_callback_vfs_readFileSync).ToLocalChecked();
+			globalAppObj->Set(key, func);
+		}
+		context->Global()->Set(globalAppKey, globalAppObj);
+	}
+
+	void MainInstance::applyConsole(v8::Local<v8::Context>& context) {
+		v8::Context::Scope context_scope(context);
+
+		v8::Isolate* isolate = context->GetIsolate();
+
+		v8::Local<v8::Value> globalAppKey = v8::String::NewFromUtf8(isolate, "_app_8a3e");
+		v8::Local<v8::Object> globalAppObj = v8::Object::New(isolate);
+		{
+			v8::Local<v8::Value> key = v8::String::NewFromUtf8(isolate, "console_out");
+			v8::Local<v8::Function> func = v8::Function::New(context, jsapp_callback_console_out).ToLocalChecked();
 			globalAppObj->Set(key, func);
 		}
 		context->Global()->Set(globalAppKey, globalAppObj);
