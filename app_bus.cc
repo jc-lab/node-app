@@ -75,7 +75,10 @@ namespace node_app {
 		static void callback(uv_async_t* handle) {
 			EventEmitTask* pthis = (EventEmitTask*)(handle->data);
 			pthis->handler_->handle(pthis->message_);
-			delete pthis;
+			uv_close((uv_handle_t*)handle, [](uv_handle_t* handle) {
+				EventEmitTask* pthis = (EventEmitTask*)(handle->data);
+				delete pthis;
+			});
 		}
 
 		EventEmitTask(std::shared_ptr<EventMessage> message, std::shared_ptr<EventHandlerHolder> handler)
