@@ -95,6 +95,11 @@ namespace node_app {
 		platform_ = node::CreatePlatform(thread_pool_size, controller);
 		v8::V8::InitializePlatform(platform_);
 		v8::V8::Initialize();
+		
+		{
+			int node_argc = argc;
+			node::Init(&node_argc, (const char**)argv, &exec_argc_, &exec_argv_);
+		}
 
 		/* Run Environment */
 		{
@@ -106,16 +111,6 @@ namespace node_app {
 
 			run_env_->context_ = node::NewContext(isolate);
 
-			run_env_->arguments.reserve(3 + argc_);
-			run_env_->arguments.push_back(argv_[0]);
-			run_env_->arguments.push_back("-e");
-			run_env_->arguments.push_back(NULL);
-
-			for (i = 1; i < argc_; i++)
-			{
-				run_env_->arguments.push_back(argv_[i]);
-			}
-
 			applyConsole(run_env_->context_);
 			applyVfs(run_env_->context_);
 		}
@@ -123,9 +118,8 @@ namespace node_app {
 
 	int MainInstance::run(const char* entry_file)
 	{
-		int exec_argc;
-		const char** exec_argv;
-		int argc = run_env_->arguments.size();
+		int i;
+		std::vector<char*> exec_arguments;
 
 		run_env_->entrypoint_src.append(R"((function(){
 	const cwd = process.cwd();
@@ -170,12 +164,17 @@ namespace node_app {
 require("./)");
 		run_env_->entrypoint_src.append(entry_file ? entry_file : "index");
 		run_env_->entrypoint_src.append(R"(");)");
-		run_env_->arguments[2] = (char*)run_env_->entrypoint_src.data();
+
+		exec_arguments.reserve(exec_argc_ + 2);
+		for (i = 0; i < exec_argc_; i++) {
+			exec_arguments[i] = (char*)exec_argv_[i];
+		}
+		exec_arguments.push_back("-e");
+		exec_arguments.push_back((char*)run_env_->entrypoint_src.data());
 
 		int exit_code = 0;
 
-		node::Init(&argc, (const char**)run_env_->arguments.data(), &exec_argc, &exec_argv);
-		run_env_->env_ = node::CreateEnvironment(run_env_->isolate_data_, run_env_->context_, argc_, argv_, exec_argc, exec_argv);
+		run_env_->env_ = node::CreateEnvironment(run_env_->isolate_data_, run_env_->context_, argc_, argv_, exec_arguments.size(), exec_arguments.data());
 
 		do {
 			v8::Context::Scope context_scope(run_env_->context_);

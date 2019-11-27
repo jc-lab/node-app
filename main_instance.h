@@ -46,7 +46,6 @@ namespace node_app {
 			node::Environment* env_;
 
 			std::string entrypoint_src;
-			std::vector<char*> arguments;
 
 			RunEnvironment(std::unique_ptr< node::ArrayBufferAllocator> array_buffer_allocator, v8::Isolate* isolate, node::IsolateData *isolate_data);
 		};
@@ -61,6 +60,9 @@ namespace node_app {
 
 		int argc_;
 		char** argv_;
+
+		int exec_argc_;
+		const char** exec_argv_;
 
 		std::unique_ptr<RunEnvironment> run_env_;
 
