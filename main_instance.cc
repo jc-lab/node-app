@@ -216,7 +216,7 @@ require("./)");
 		platform_->CancelPendingDelayedTasks(run_env_->isolate_);
 		platform_->UnregisterIsolate(run_env_->isolate_);
 
-		exec_arguments_.clear();
+		run_arguments_.clear();
 		run_env_.reset();
 
 		return exit_code;
