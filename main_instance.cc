@@ -95,33 +95,15 @@ namespace node_app {
 		platform_ = node::CreatePlatform(thread_pool_size, controller);
 		v8::V8::InitializePlatform(platform_);
 		v8::V8::Initialize();
-		
-		{
-			int node_argc = argc;
-			node::Init(&node_argc, (const char**)argv, &exec_argc_, &exec_argv_);
-		}
-
-		/* Run Environment */
-		{
-			std::unique_ptr< node::ArrayBufferAllocator> array_buffer_allocator = node::ArrayBufferAllocator::Create();
-			v8::Isolate* isolate = node::NewIsolate(array_buffer_allocator.get(), loop_, platform_);
-			node::IsolateData* isolate_data = node::CreateIsolateData(isolate, loop_, platform_);
-
-			run_env_.reset(new RunEnvironment(std::move(array_buffer_allocator), isolate, isolate_data));
-
-			run_env_->context_ = node::NewContext(isolate);
-
-			applyConsole(run_env_->context_);
-			applyVfs(run_env_->context_);
-		}
 	}
 
-	int MainInstance::run(const char* entry_file)
+	int MainInstance::prepare(const char* entry_file)
 	{
 		int i;
-		std::vector<char*> exec_arguments;
 
-		run_env_->entrypoint_src.append(R"((function(){
+		std::string entrypoint_src;
+
+		entrypoint_src.append(R"((function(){
 	const cwd = process.cwd();
 	const internalBinding = process.internalBinding
 	const fs = require('fs');
@@ -162,19 +144,45 @@ namespace node_app {
 	}
 })();
 require("./)");
-		run_env_->entrypoint_src.append(entry_file ? entry_file : "index");
-		run_env_->entrypoint_src.append(R"(");)");
 
-		exec_arguments.reserve(exec_argc_ + 2);
-		for (i = 0; i < exec_argc_; i++) {
-			exec_arguments[i] = (char*)exec_argv_[i];
+		entrypoint_src.append(entry_file ? entry_file : "index");
+		entrypoint_src.append(R"(");)");
+
+		run_arguments_.reserve(argc_ + 2);
+		run_arguments_.push_back(argv_[0]);
+		run_arguments_.push_back("-e");
+		run_arguments_.push_back((char*)entrypoint_src.data());
+		for (i = 1; i < argc_; i++) {
+			run_arguments_.push_back((char*)argv_[i]);
 		}
-		exec_arguments.push_back("-e");
-		exec_arguments.push_back((char*)run_env_->entrypoint_src.data());
 
+		{
+			int node_argc = run_arguments_.size();
+			node::Init(&node_argc, (const char**)run_arguments_.data(), &exec_argc_, &exec_argv_);
+		}
+
+		/* Run Environment */
+		{
+			std::unique_ptr< node::ArrayBufferAllocator> array_buffer_allocator = node::ArrayBufferAllocator::Create();
+			v8::Isolate* isolate = node::NewIsolate(array_buffer_allocator.get(), loop_, platform_);
+			node::IsolateData* isolate_data = node::CreateIsolateData(isolate, loop_, platform_);
+
+			run_env_.reset(new RunEnvironment(std::move(array_buffer_allocator), isolate, isolate_data));
+
+			run_env_->context_ = node::NewContext(isolate);
+
+			applyConsole(run_env_->context_);
+			applyVfs(run_env_->context_);
+		}
+
+		run_env_->env_ = node::CreateEnvironment(run_env_->isolate_data_, run_env_->context_, argc_, argv_, exec_argc_, exec_argv_);
+
+		return 0;
+	}
+
+
+	int MainInstance::run() {
 		int exit_code = 0;
-
-		run_env_->env_ = node::CreateEnvironment(run_env_->isolate_data_, run_env_->context_, argc_, argv_, exec_arguments.size(), exec_arguments.data());
 
 		do {
 			v8::Context::Scope context_scope(run_env_->context_);
@@ -208,6 +216,7 @@ require("./)");
 		platform_->CancelPendingDelayedTasks(run_env_->isolate_);
 		platform_->UnregisterIsolate(run_env_->isolate_);
 
+		exec_arguments_.clear();
 		run_env_.reset();
 
 		return exit_code;

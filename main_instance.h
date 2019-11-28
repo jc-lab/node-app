@@ -15,13 +15,16 @@
 #include "vfs_handler.h"
 #include "console_handler.h"
 
+#include <vector>
+
 namespace node_app {
 
 	class MainInstance {
 	public:
 		MainInstance();
 		void initializeOncePerProcess(int argc, char** argv);
-		int run(const char *entry_file = NULL);
+		int prepare(const char* entry_file = NULL);
+		int run();
 		void teardownProcess();
 
 		void setVfsHandler(VfsHandler *handler);
@@ -64,6 +67,7 @@ namespace node_app {
 		int exec_argc_;
 		const char** exec_argv_;
 
+		std::vector<char*> run_arguments_;
 		std::unique_ptr<RunEnvironment> run_env_;
 
 		void applyVfs(v8::Local<v8::Context>& context);
