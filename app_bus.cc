@@ -113,6 +113,7 @@ namespace node_app {
 		}
 		else if (vvalue->IsBoolean()) {
 			v8::Local<v8::StringObject> vimpl = vvalue.As<v8::StringObject>();
+			target.SetBool(vimpl->Int32Value(vcontext).ToChecked());
 		}
 		else if (vvalue->IsInt32()) {
 			v8::Local<v8::Integer> vimpl = vvalue.As<v8::Integer>();
