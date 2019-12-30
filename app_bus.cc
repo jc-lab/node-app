@@ -185,17 +185,17 @@ namespace node_app {
 		else if (src.IsBool()) {
 			vtarget = v8::Boolean::New(isolate, src.GetBool());
 		}
-		else if (src.IsInt()) {
-			vtarget = v8::Int32::New(isolate, src.GetInt());
-		}
-		else if (src.IsUint()) {
-			vtarget = v8::Uint32::New(isolate, src.GetUint());
+		else if (src.IsUint64()) {
+			vtarget = v8::BigInt::NewFromUnsigned(isolate, src.GetUint64());
 		}
 		else if (src.IsInt64()) {
 			vtarget = v8::BigInt::New(isolate, src.GetInt64());
 		}
-		else if (src.IsUint64()) {
-			vtarget = v8::BigInt::NewFromUnsigned(isolate, src.GetUint64());
+		else if (src.IsUint()) {
+			vtarget = v8::Uint32::New(isolate, src.GetUint());
+		}
+		else if (src.IsInt()) {
+			vtarget = v8::Int32::New(isolate, src.GetInt());
 		}
 		else if (src.IsDouble()) {
 			vtarget = v8::Number::New(isolate, src.GetDouble());
