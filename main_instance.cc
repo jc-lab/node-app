@@ -88,6 +88,13 @@ namespace node_app {
 		argv_ = uv_setup_args(argc, argv);
 
 		loop_ = uv_default_loop();
+
+		tracing_agent_ = node::CreateAgent();
+		node::tracing::TraceEventHelper::SetAgent(tracing_agent_);
+		node::tracing::TracingController* controller = node::tracing::TraceEventHelper::GetTracingController();
+		platform_ = node::CreatePlatform(thread_pool_size, controller);
+		v8::V8::InitializePlatform(platform_);
+		v8::V8::Initialize();
 	}
 
 	int MainInstance::prepare(const char* entry_file)
@@ -156,13 +163,6 @@ require("./)");
 
 		/* Run Environment */
 		{
-			int thread_pool_size = 4;
-			platform_ = node::InitializeV8Platform(thread_pool_size);
-			node::tracing::Agent* tracing_agent = node::CreateAgent();
-			node::tracing::TraceEventHelper::SetAgent(tracing_agent);
-			node::tracing::TracingController* controller = node::tracing::TraceEventHelper::GetTracingController();
-			v8::V8::Initialize();
-
 			std::unique_ptr< node::ArrayBufferAllocator> array_buffer_allocator = node::ArrayBufferAllocator::Create();
 			v8::Isolate* isolate = node::NewIsolate(array_buffer_allocator.get(), loop_, platform_);
 			node::IsolateData* isolate_data = node::CreateIsolateData(isolate, loop_, platform_);

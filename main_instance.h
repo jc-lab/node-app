@@ -54,6 +54,7 @@ namespace node_app {
 		};
 
 		uv_loop_t* loop_;
+		node::tracing::Agent* tracing_agent_;
 
 		node::MultiIsolatePlatform* platform_;
 
