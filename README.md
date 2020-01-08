@@ -2,18 +2,6 @@
 
 node-app은 C++환경에서 node.js를 VFS(Virtual File System)환경에서 동작시킬 수 있게 도와주는 라이브러리 입니다. 이를 이용해 node.js 프로젝트를 패키징하여 단일 실행 파일로 만들 수 있습니다. libarchive등을 이용하면 좋습니다.
 
-node-app을 사용하려면 node 소스를 변경하여 새로 빌드해야 합니다.
-
-node.h에서
-```c++
-MultiIsolatePlatform* InitializeV8Platform(int thread_pool_size);
-```
-이 부분을
-```c++
-NODE_EXTERN MultiIsolatePlatform* InitializeV8Platform(int thread_pool_size);
-```
-이와같이 변경해야 합니다.
-
 # Example
 
 ```c++
@@ -63,3 +51,8 @@ int main(int argc, char *argv[])
 }
 ```
 
+# Issue
+
+## Worker 문제
+* per_process::v8_platform(export되지 않아 외부에서 사용할 수 없는 객체)을 이용하여 초기화하지 않은경우 node-app을 사용하려면 [6db45bf7def22eedfd95dac95713e850c366b169](https://github.com/nodejs/node/commit/6db45bf7def22eedfd95dac95713e850c366b169) 커밋 이후 버전으로 빌드된 libnode.dll이 필요합니다. ([#31217](https://github.com/nodejs/node/pull/31217) 코멘트 참고)
+* 아직 Worker는 동작하지 않습니다. ([#31258](https://github.com/nodejs/node/issues/31258) 참고)
