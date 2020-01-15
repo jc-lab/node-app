@@ -67,6 +67,28 @@ namespace node_app {
 		void handle(std::shared_ptr<EventMessage> message) override;
 	};
 
+	struct AppBus::HostRequestHandlerHolder : RequestHandlerHolder {
+		AppBus* appbus_;
+		RequestHandler_t func_;
+
+		HostRequestHandlerHolder(AppBus* appbus, uv_loop_t* loop, RequestHandler_t func)
+			: appbus_(appbus), RequestHandlerHolder(loop), func_(func)
+		{ }
+
+		void handle(std::shared_ptr<RequestMessage> message) override;
+	};
+
+	struct AppBus::V8RequestHandlerHolder : RequestHandlerHolder {
+		AppBus* appbus_;
+		v8::Persistent<v8::Function> vpfunc_;
+
+		V8RequestHandlerHolder(AppBus* appbus, uv_loop_t* loop, v8::Isolate* isolate, v8::Local<v8::Function> func)
+			: appbus_(appbus), RequestHandlerHolder(loop), vpfunc_(isolate, func)
+		{ }
+
+		void handle(std::shared_ptr<RequestMessage> message) override;
+	};
+
 	struct AppBus::EventEmitTask {
 		uv_async_t async_;
 		std::shared_ptr<EventMessage> message_;
@@ -185,17 +207,17 @@ namespace node_app {
 		else if (src.IsBool()) {
 			vtarget = v8::Boolean::New(isolate, src.GetBool());
 		}
-		else if (src.IsUint64()) {
-			vtarget = v8::BigInt::NewFromUnsigned(isolate, src.GetUint64());
-		}
-		else if (src.IsInt64()) {
-			vtarget = v8::BigInt::New(isolate, src.GetInt64());
-		}
 		else if (src.IsUint()) {
 			vtarget = v8::Uint32::New(isolate, src.GetUint());
 		}
 		else if (src.IsInt()) {
 			vtarget = v8::Int32::New(isolate, src.GetInt());
+		}
+		else if (src.IsUint64()) {
+			vtarget = v8::BigInt::NewFromUnsigned(isolate, src.GetUint64());
+		}
+		else if (src.IsInt64()) {
+			vtarget = v8::BigInt::New(isolate, src.GetInt64());
 		}
 		else if (src.IsDouble()) {
 			vtarget = v8::Number::New(isolate, src.GetDouble());
@@ -239,6 +261,14 @@ namespace node_app {
 		{
 			EventLock lock(this, event_key, true);
 			lock.holder()->list.emplace_back(std::move(handler_holder));
+		}
+	}
+
+	void AppBus::onRequest(const char* key, RequestHandler_t handler, uv_loop_t* loop) {
+		std::unique_ptr<HostRequestHandlerHolder> handler_holder(new HostRequestHandlerHolder(this, loop ? loop : loop_, handler));
+		{
+			EventLock lock(this, "$request", true);
+			lock.holder()->reqs[key] = std::move(handler_holder);
 		}
 	}
 
@@ -309,6 +339,39 @@ namespace node_app {
         this->emitImpl(event_key, message);
     }
 
+	void AppBus::requestFromNode(const v8::FunctionCallbackInfo<v8::Value>& info) {
+		v8::Isolate* isolate = info.GetIsolate();
+		v8::String::Utf8Value reqid(isolate, info[1]);
+		v8::String::Utf8Value key(isolate, info[2]);
+		v8::Local<v8::Array> v8args = info[3].As<v8::Array>();
+
+		{
+			EventLock lock(this, "$request", true);
+			auto& reqs = lock.holder()->reqs;
+			auto it = reqs.find(*key);
+			if (it != reqs.end()) {
+				std::shared_ptr<RequestMessage> message(new RequestMessage(*reqid));
+				for (int i = 0, n = v8args->Length(); i < n; i++) {
+					rapidjson::Value jsonValue;
+					v8ValueToJsonObject(jsonValue, message->args.GetAllocator(), isolate, v8args->Get(i));
+					message->args.PushBack(jsonValue, message->args.GetAllocator());
+				}
+				it->second->handle(message);
+			} else {
+				v8::Local<v8::String> obj_code_key = v8::String::NewFromUtf8(isolate, "code");
+				v8::Local<v8::String> obj_code_value = v8::String::NewFromUtf8(isolate, "ENOFUNC");
+				v8::Local<v8::String> obj_errno_key = v8::String::NewFromUtf8(isolate, "errno");
+				v8::Local<v8::Integer> obj_errno_value = v8::Integer::New(isolate, -2);
+				v8::Local<v8::String> msg = v8::String::NewFromUtf8(isolate, "Not registered request key");
+				v8::Local<v8::Value> err = v8::Exception::Error(msg);
+				v8::Local<v8::Object> err_obj = err.As<v8::Object>();
+				err_obj->Set(isolate->GetCurrentContext(), obj_code_key, obj_code_value);
+				err_obj->Set(isolate->GetCurrentContext(), obj_errno_key, obj_errno_value);
+				isolate->ThrowException(err_obj);
+			}
+		}
+	}
+
 	void AppBus::v8CallbackEmit(const v8::FunctionCallbackInfo<v8::Value>& info) {
 		v8::HandleScope scope(v8::Isolate::GetCurrent());
 		v8::Isolate* isolate = info.GetIsolate();
@@ -327,6 +390,12 @@ namespace node_app {
 		}
 
 		v8::String::Utf8Value event_key(isolate, info[0]);
+
+		if (strcmp(*event_key, "$request") == 0) {
+			self->requestFromNode(info);
+			return;
+		}
+
 		std::shared_ptr<EventMessage> message(new EventMessage());
 
 		for (int i = 1, n = info.Length(); i < n; i++) {
@@ -365,6 +434,48 @@ namespace node_app {
 	void AppBus::HostEventHandlerHolder::handle(std::shared_ptr<EventMessage> message)
 	{
 		func_(message->args);
+	}
+
+	void AppBus::V8RequestHandlerHolder::handle(std::shared_ptr<RequestMessage> message) {
+		v8::Isolate* isolate = v8::Isolate::GetCurrent();
+		v8::HandleScope handle_scope(isolate);
+		v8::Local<v8::Context> context = v8::Context::New(isolate);
+		v8::Context::Scope context_scope(context);
+
+		v8::Local<v8::Context> temp = isolate->GetCurrentContext();
+
+		v8::Local<v8::Function> vcallback = v8::Local<v8::Function>::New(isolate, vpfunc_);
+
+		const rapidjson::Document& args = message->args;
+		std::vector<v8::Local<v8::Value>> vargs(args.Size());
+
+		int index = 0;
+		for (auto iter = args.Begin(); iter != args.End(); iter++, index++) {
+			vargs[index] = jsonObjectToV8Value(isolate, *iter);
+		}
+
+		vcallback->Call(temp, v8::Null(isolate), vargs.size(), vargs.data());
+		//node::async_context async_context = node::EmitAsyncInit(isolate, v8::Object::New(isolate), "AppBus emit");
+		//node::MakeCallback(isolate, v8::Null(isolate).As<v8::Object>(), vcallback, vargs.size(), vargs.data(), async_context);
+		//node::EmitAsyncDestroy(isolate, async_context);
+	}
+
+	void AppBus::HostRequestHandlerHolder::handle(std::shared_ptr<RequestMessage> message)
+	{
+		ResponseHandler_t response_handler = [appbus = appbus_, reqid = message->reqid](const rapidjson::Document& retval, bool is_throw) -> void {
+			rapidjson::Document args(rapidjson::kArrayType);
+			rapidjson::Value json_reqid;
+			rapidjson::Value json_type;
+			rapidjson::Value json_data;
+			json_reqid.SetString(reqid.c_str(), reqid.length(), args.GetAllocator());
+			json_type.SetInt(is_throw ? 0 : 1);
+			json_data.CopyFrom(retval, args.GetAllocator());
+			args.PushBack(json_reqid, args.GetAllocator());
+			args.PushBack(json_type, args.GetAllocator());
+			args.PushBack(json_data, args.GetAllocator());
+			appbus->emit("$response.node", args);
+		};
+		func_(message->args, response_handler);
 	}
 
 	AppBus::AppBus()
