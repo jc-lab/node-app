@@ -27,6 +27,7 @@ namespace node_app {
 		int prepare(const char* entry_file = NULL, int exec_argc = 0, const char** exec_argv = NULL);
 		int run();
 		void teardownProcess();
+		void nodeEmitExit();
 
 		void setVfsHandler(VfsHandler *handler);
 		void setConsoleOutputHandler(ConsoleOutputHandler* handler);
@@ -50,6 +51,8 @@ namespace node_app {
 			node::Environment* env_;
 
 			std::string entrypoint_src;
+
+			std::atomic_bool stopping_;
 
 			RunEnvironment(std::unique_ptr< node::ArrayBufferAllocator> array_buffer_allocator, v8::Isolate* isolate, node::IsolateData *isolate_data);
 		};

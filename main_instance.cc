@@ -76,7 +76,8 @@ namespace node_app {
 
     MainInstance::RunEnvironment::RunEnvironment(std::unique_ptr< node::ArrayBufferAllocator> array_buffer_allocator, v8::Isolate* isolate, node::IsolateData* isolate_data)
         : array_buffer_allocator_(std::move(array_buffer_allocator)), isolate_(isolate), isolate_data_(isolate_data),
-          locker(isolate), isolate_scope(isolate), handle_scope(isolate)
+          locker(isolate), isolate_scope(isolate), handle_scope(isolate),
+          stopping_(false)
     {
     }
 
@@ -199,7 +200,7 @@ require("./)");
                 node::CallbackScope callback_scope(
                     run_env_->isolate_,
                     v8::Object::New(run_env_->isolate_),
-                    {1, 0});
+                    { 1, 0 });
                 node::LoadEnvironment(run_env_->env_);
             }
 
@@ -208,15 +209,15 @@ require("./)");
 
                 bool more;
                 do {
-                    more = uv_run(loop_, UV_RUN_ONCE);
+                    more = uv_run(loop_, UV_RUN_ONCE) ? true : false;
                     platform_->DrainTasks(run_env_->isolate_);
-                    if (more == false) {
+                    more = uv_loop_alive(loop_);
+                    if (more && !run_env_->stopping_) continue;
+                    if (!uv_loop_alive(loop_)) {
                         node::EmitBeforeExit(run_env_->env_);
-                        more = uv_loop_alive(loop_);
-                        if (uv_run(loop_, UV_RUN_NOWAIT) != 0)
-                            more = true;
                     }
-                } while (more == true);
+                    more = uv_loop_alive(loop_);
+                } while (more && !run_env_->stopping_);
             }
             exit_code = node::EmitExit(run_env_->env_);
             node::RunAtExit(run_env_->env_);
@@ -243,6 +244,12 @@ require("./)");
     {
         v8::V8::Dispose();
         node::FreePlatform(platform_);
+    }
+
+    void MainInstance::nodeEmitExit()
+    {
+        run_env_->stopping_.store(true);
+        node::Stop(run_env_->env_);
     }
 
     void MainInstance::setVfsHandler(VfsHandler* handler)
