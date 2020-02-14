@@ -16,6 +16,7 @@
 #include "console_handler.h"
 
 #include <vector>
+#include <atomic>
 
 namespace node_app {
 
@@ -23,7 +24,7 @@ namespace node_app {
 	public:
 		MainInstance();
 		void initializeOncePerProcess(int argc, char** argv);
-		int prepare(const char* entry_file = NULL);
+		int prepare(const char* entry_file = NULL, int exec_argc = 0, const char** exec_argv = NULL);
 		int run();
 		void teardownProcess();
 
@@ -61,11 +62,11 @@ namespace node_app {
 		VfsHandler *vfs_handler_;
 		ConsoleOutputHandler *console_out_handler_;
 
-		int argc_;
-		char** argv_;
+		int node_argc_;
+		char** node_argv_;
 
-		int exec_argc_;
-		const char** exec_argv_;
+		int node_exec_argc_;
+		const char** node_exec_argv_;
 
 		std::vector<char*> run_arguments_;
 		std::unique_ptr<RunEnvironment> run_env_;

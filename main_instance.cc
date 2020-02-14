@@ -80,12 +80,12 @@ namespace node_app {
 	{
 	}
 
-	void MainInstance::initializeOncePerProcess(int argc, char** argv) {
+	void MainInstance::initializeOncePerProcess(int node_argc, char** node_argv) {
 		const int thread_pool_size = 2;
 		int i;
 
-		argc_ = argc;
-		argv_ = uv_setup_args(argc, argv);
+		node_argc_ = node_argc;
+		node_argv_ = uv_setup_args(node_argc, node_argv);
 
 		loop_ = uv_default_loop();
 
@@ -97,7 +97,7 @@ namespace node_app {
 		v8::V8::Initialize();
 	}
 
-	int MainInstance::prepare(const char* entry_file)
+	int MainInstance::prepare(const char* entry_file, int exec_argc, const char **exec_argv)
 	{
 		int i;
 
@@ -148,17 +148,25 @@ require("./)");
 		entrypoint_src.append(entry_file ? entry_file : "index");
 		entrypoint_src.append(R"(");)");
 
-		run_arguments_.reserve(argc_ + 2);
-		run_arguments_.push_back(argv_[0]);
+		run_arguments_.reserve(node_argc_ + 2);
+		run_arguments_.push_back(node_argv_[0]);
 		run_arguments_.push_back("-e");
 		run_arguments_.push_back((char*)entrypoint_src.data());
-		for (i = 1; i < argc_; i++) {
-			run_arguments_.push_back((char*)argv_[i]);
+		for (i = 1; i < node_argc_; i++) {
+			run_arguments_.push_back((char*)node_argv_[i]);
 		}
 
 		{
 			int node_argc = run_arguments_.size();
-			node::Init(&node_argc, (const char**)run_arguments_.data(), &exec_argc_, &exec_argv_);
+			node::Init(&node_argc, (const char**)run_arguments_.data(), &node_exec_argc_, &node_exec_argv_);
+			
+			if (!exec_argc || !exec_argv) {
+				exec_argc = node_exec_argc_;
+				exec_argv = node_exec_argv_;
+			}
+			if (exec_argc < 0) {
+				exec_argc = 0;
+			}
 		}
 
 		/* Run Environment */
@@ -175,7 +183,7 @@ require("./)");
 			applyVfs(run_env_->context_);
 		}
 
-		run_env_->env_ = node::CreateEnvironment(run_env_->isolate_data_, run_env_->context_, argc_, argv_, exec_argc_, exec_argv_);
+		run_env_->env_ = node::CreateEnvironment(run_env_->isolate_data_, run_env_->context_, node_argc_, node_argv_, exec_argc, exec_argv);
 
 		return 0;
 	}
