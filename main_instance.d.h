@@ -14,16 +14,16 @@
 
 namespace node_app {
 
-	class MainInstance;
+class MainInstance;
 
-	template<class T>
-	class MainInstanceWithContext;
+template<class T>
+class MainInstanceWithContext;
 
-	template<class T>
-	class MainInstanceWithContext<std::unique_ptr<T>>;
+template<class T>
+class MainInstanceWithContext<std::unique_ptr<T>>;
 
-	template<class T>
-	class MainInstanceWithContext<std::shared_ptr<T>>;
+template<class T>
+class MainInstanceWithContext<std::shared_ptr<T>>;
 }
 
 #endif //__NODE_MAIN_INSTANCE_D_H__

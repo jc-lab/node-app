@@ -12,7 +12,7 @@
 
 namespace node_app {
 
-	class AppBus;
+class AppBus;
 
 }
 

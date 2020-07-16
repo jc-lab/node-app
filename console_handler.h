@@ -15,15 +15,15 @@
 
 namespace node_app {
 
-	enum ConsoleOutputType {
-		CONSOLE_STDOUT = 1,
-		CONSOLE_STDERR = 2,
-	};
+enum ConsoleOutputType {
+  CONSOLE_STDOUT = 1,
+  CONSOLE_STDERR = 2,
+};
 
-	class ConsoleOutputHandler {
-	public:
-		virtual bool consoleOutput(ConsoleOutputType type, const std::string& text) = 0;
-	};
+class ConsoleOutputHandler {
+ public:
+  virtual bool consoleOutput(ConsoleOutputType type, const std::string &text) = 0;
+};
 
 }
 

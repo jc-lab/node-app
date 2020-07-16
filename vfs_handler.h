@@ -15,23 +15,23 @@
 
 namespace node_app {
 
-	class StringOnceWriter {
-	public:
-		virtual void write(const char* data, int64_t size = -1) = 0;
-	};
+class StringOnceWriter {
+ public:
+  virtual void write(const char *data, int64_t size = -1) = 0;
+};
 
-	class ArrayBufferWriter {
-	public:
-		virtual void* allocate(size_t size) = 0;
-		virtual void* allocate(void* data, size_t size) = 0;
-	};
+class ArrayBufferWriter {
+ public:
+  virtual void *allocate(size_t size) = 0;
+  virtual void *allocate(void *data, size_t size) = 0;
+};
 
-	class VfsHandler {
-	public:
-		virtual int vfsStat(const std::string& rel_path) = 0;
-		virtual int vfsRealpathSync(std::string &retval, const std::string& arg_path, const std::string& rel_path) = 0;
-		virtual int vfsReadFileSync(StringOnceWriter &writer, const std::string& rel_path) = 0;
-	};
+class VfsHandler {
+ public:
+  virtual int vfsStat(const std::string &rel_path) = 0;
+  virtual int vfsRealpathSync(std::string &retval, const std::string &arg_path, const std::string &rel_path) = 0;
+  virtual int vfsReadFileSync(StringOnceWriter &writer, const std::string &rel_path) = 0;
+};
 
 }
 
