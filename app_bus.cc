@@ -16,7 +16,7 @@ namespace node_app {
 
 	class AppBus::EventLock {
 	private:
-		std::unique_lock<std::mutex> lock_;
+		std::unique_lock<std::recursive_timed_mutex> lock_;
 		EventHolder* holder_;
 
 	public:
@@ -31,7 +31,7 @@ namespace node_app {
 		EventLock(AppBus* cls, const char* event_key, bool create_if_not_exists)
 			: holder_(nullptr)
 		{
-			std::unique_lock<std::mutex> lock_map(cls->mutex_);
+			std::unique_lock<std::recursive_timed_mutex> lock_map(cls->mutex_);
 			auto map_iter = cls->event_map_.find(event_key);
 			if (map_iter == cls->event_map_.end()) {
 				if (!create_if_not_exists) {
@@ -43,7 +43,7 @@ namespace node_app {
 			} else {
 				holder_ = map_iter->second.get();
 			}
-			lock_ = std::unique_lock<std::mutex>(holder_->mutex);
+			lock_ = std::unique_lock<std::recursive_timed_mutex>(holder_->mutex);
 		}
 	};
 
@@ -344,31 +344,35 @@ namespace node_app {
 		v8::String::Utf8Value reqid(isolate, info[1]);
 		v8::String::Utf8Value key(isolate, info[2]);
 		v8::Local<v8::Array> v8args = info[3].As<v8::Array>();
+		std::shared_ptr<RequestHandlerHolder> req_handler;
 
 		{
 			EventLock lock(this, "$request", true);
 			auto& reqs = lock.holder()->reqs;
 			auto it = reqs.find(*key);
 			if (it != reqs.end()) {
-				std::shared_ptr<RequestMessage> message(new RequestMessage(*reqid));
-				for (int i = 0, n = v8args->Length(); i < n; i++) {
-					rapidjson::Value jsonValue;
-					v8ValueToJsonObject(jsonValue, message->args.GetAllocator(), isolate, v8args->Get(i));
-					message->args.PushBack(jsonValue, message->args.GetAllocator());
-				}
-				it->second->handle(message);
-			} else {
-				v8::Local<v8::String> obj_code_key = v8::String::NewFromUtf8(isolate, "code");
-				v8::Local<v8::String> obj_code_value = v8::String::NewFromUtf8(isolate, "ENOFUNC");
-				v8::Local<v8::String> obj_errno_key = v8::String::NewFromUtf8(isolate, "errno");
-				v8::Local<v8::Integer> obj_errno_value = v8::Integer::New(isolate, -2);
-				v8::Local<v8::String> msg = v8::String::NewFromUtf8(isolate, "Not registered request key");
-				v8::Local<v8::Value> err = v8::Exception::Error(msg);
-				v8::Local<v8::Object> err_obj = err.As<v8::Object>();
-				err_obj->Set(isolate->GetCurrentContext(), obj_code_key, obj_code_value);
-				err_obj->Set(isolate->GetCurrentContext(), obj_errno_key, obj_errno_value);
-				isolate->ThrowException(err_obj);
+			  req_handler = it->second;
 			}
+		}
+		if (req_handler) {
+			std::shared_ptr<RequestMessage> message(new RequestMessage(*reqid));
+			for (int i = 0, n = v8args->Length(); i < n; i++) {
+				rapidjson::Value jsonValue;
+				v8ValueToJsonObject(jsonValue, message->args.GetAllocator(), isolate, v8args->Get(i));
+				message->args.PushBack(jsonValue, message->args.GetAllocator());
+			}
+			req_handler->handle(message);
+		} else {
+			v8::Local<v8::String> obj_code_key = v8::String::NewFromUtf8(isolate, "code");
+			v8::Local<v8::String> obj_code_value = v8::String::NewFromUtf8(isolate, "ENOFUNC");
+			v8::Local<v8::String> obj_errno_key = v8::String::NewFromUtf8(isolate, "errno");
+			v8::Local<v8::Integer> obj_errno_value = v8::Integer::New(isolate, -2);
+			v8::Local<v8::String> msg = v8::String::NewFromUtf8(isolate, "Not registered request key");
+			v8::Local<v8::Value> err = v8::Exception::Error(msg);
+			v8::Local<v8::Object> err_obj = err.As<v8::Object>();
+			err_obj->Set(isolate->GetCurrentContext(), obj_code_key, obj_code_value);
+			err_obj->Set(isolate->GetCurrentContext(), obj_errno_key, obj_errno_value);
+			isolate->ThrowException(err_obj);
 		}
 	}
 

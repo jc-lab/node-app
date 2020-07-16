@@ -79,7 +79,7 @@ namespace node_app {
 		};
 
 		struct EventHolder {
-			std::mutex mutex;
+			std::recursive_timed_mutex mutex;
 			std::list<std::shared_ptr<EventHandlerHolder>> list;
 			std::map<std::string, std::shared_ptr<RequestHandlerHolder>> reqs;
 		};
@@ -93,7 +93,7 @@ namespace node_app {
 		struct HostRequestHandlerHolder;
 		struct V8RequestHandlerHolder;
 
-		std::mutex mutex_;
+		std::recursive_timed_mutex mutex_;
 		std::map<std::string, std::unique_ptr<EventHolder>> event_map_;
 
 		static void v8ThrowError(const char *msg);
